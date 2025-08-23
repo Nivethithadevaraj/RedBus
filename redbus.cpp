@@ -7,6 +7,7 @@
 
 using namespace std;
 
+// ---------- Utility Functions ----------
 bool getYesNo(const string& prompt) {
     char input;
     cout << prompt;
@@ -20,8 +21,28 @@ bool getYesNo(const string& prompt) {
     return (input == 'Y' || input == 'y');
 }
 
+bool isValidPhoneNumber(const string& phone) {
+    if (phone.length() != 10) return false;
+    for (char c : phone) {
+        if (!isdigit(c)) return false;
+    }
+    return true;
+}
+
+// *** Added: Check if phone number exists in Users.csv ***
+bool isPhoneNumberExists(const string& phoneNumber) {
+    ifstream file("Users.csv");
+    string line;
+    while (getline(file, line)) {
+        if (line == phoneNumber) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void saveUserToCSV(const string& phoneNumber) {
-    ofstream file("Users.csv", ios::app); // Append mode
+    ofstream file("Users.csv", ios::app);
     if (file.is_open()) {
         file << phoneNumber << endl;
         file.close();
@@ -45,14 +66,7 @@ bool verifyOTP(int generatedOTP) {
     }
 }
 
-bool isValidPhoneNumber(const string& phone) {
-    if (phone.length() != 10) return false;
-    for (char c : phone) {
-        if (!isdigit(c)) return false;
-    }
-    return true;
-}
-
+// ---------- Login/Register Process ----------
 bool processLoginOrRegister() {
     char choice;
     cout << "Do you want to Login or Register? (L/R): ";
@@ -63,17 +77,24 @@ bool processLoginOrRegister() {
         return processLoginOrRegister(); // retry
     }
 
+    string phoneNumber;
+
     while (true) {
-        string phoneNumber;
         cout << "Enter your phone number (10 digits): ";
         cin >> phoneNumber;
 
         if (!isValidPhoneNumber(phoneNumber)) {
             cout << "Invalid phone number. Must be exactly 10 digits.\n";
-            continue; // ask again
+            continue;
         }
+        break;
+    }
 
-        // Generate random 4-digit OTP
+    if (isPhoneNumberExists(phoneNumber)) {
+        cout << "Phone number already exists.\n";
+    }
+
+    while (true) {
         srand(time(0));
         int otp = rand() % 9000 + 1000;
 
@@ -81,21 +102,66 @@ bool processLoginOrRegister() {
         cout << "Your OTP is: " << otp << endl;
 
         if (verifyOTP(otp)) {
-            saveUserToCSV(phoneNumber);
-            return true; // success
+            if (!isPhoneNumberExists(phoneNumber)) {
+                saveUserToCSV(phoneNumber);
+            }
+            return true;
         } else {
             if (!getYesNo("Do you want to try again? (Y/N): ")) {
-                return false; // user chose not to retry
+                return false;
             }
         }
     }
 }
 
-void dashboard() {
-    cout << "Welcome to the Dashboard!\n";
-    // Placeholder for future functionality
+
+// ---------- Dashboard Placeholder Functions ----------
+void searchBus() {
+    // To be implemented later
 }
 
+void bookings() {
+    // To be implemented later
+}
+
+void updateProfile() {
+    // To be implemented later
+}
+
+// ---------- Dashboard Function ----------
+void dashboard() {
+    bool stayInDashboard = true;
+
+    while (stayInDashboard) {
+        cout << "\n--- DASHBOARD ---\n";
+        cout << "1. Search Bus\n";
+        cout << "2. Bookings\n";
+        cout << "3. Update Profile\n";
+        cout << "Enter your choice (1-3): ";
+
+        int choice;
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+                searchBus();
+                break;
+            case 2:
+                bookings();
+                break;
+            case 3:
+                updateProfile();
+                break;
+            default:
+                cout << "Invalid choice. Please enter 1, 2, or 3.\n";
+                continue; // show menu again
+        }
+
+        stayInDashboard = getYesNo("Go back to dashboard? (Y/N): ");
+    }
+}
+
+// ---------- Main ----------
 int main() {
     if (processLoginOrRegister()) {
         dashboard();
