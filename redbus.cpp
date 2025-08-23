@@ -7,43 +7,41 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
-#include <ctime>
+#include <limits>
 
 using namespace std;
 
 // ---------- Struct ----------
 struct Bus {
     int id;
+    string date;        // dd-mm-yyyy
     string source;
     string destination;
-    string busType;
-    int price;
+    int seats;          // from Buses.csv column "SEATS"
+    int price;          // PRICE
 };
 
-// ---------- Utility Functions ----------
+// ---------- Function Declarations ----------
+void passengerInfoAndPayment(const vector<int>& seats, int busId);
 
-// Get yes/no input (Y/N, case insensitive)
+// ---------- Utility Functions ----------
 bool getYesNo(const string& prompt) {
     char input;
     cout << prompt;
     cin >> input;
-
     while (input != 'Y' && input != 'y' && input != 'N' && input != 'n') {
         cout << "Invalid input. Please enter Y or N: ";
         cin >> input;
     }
-
     return (input == 'Y' || input == 'y');
 }
 
-// Convert string to lowercase for case-insensitive comparison
 string toLower(const string& s) {
     string result = s;
     transform(result.begin(), result.end(), result.begin(), ::tolower);
     return result;
 }
 
-// Validate phone number: exactly 10 digits
 bool isValidPhoneNumber(const string& phone) {
     if (phone.length() != 10) return false;
     for (char c : phone) {
@@ -52,14 +50,11 @@ bool isValidPhoneNumber(const string& phone) {
     return true;
 }
 
-// Check if phone number exists in Users.csv
 bool isPhoneNumberExists(const string& phoneNumber) {
     ifstream file("Users.csv");
     if (!file.is_open()) {
-        // If file doesn't exist, treat as no users yet
         return false;
     }
-
     string line;
     while (getline(file, line)) {
         if (line == phoneNumber) {
@@ -71,7 +66,6 @@ bool isPhoneNumberExists(const string& phoneNumber) {
     return false;
 }
 
-// Save phone number to Users.csv
 void saveUserToCSV(const string& phoneNumber) {
     ofstream file("Users.csv", ios::app);
     if (file.is_open()) {
@@ -83,12 +77,10 @@ void saveUserToCSV(const string& phoneNumber) {
     }
 }
 
-// Verify OTP entered by user
 bool verifyOTP(int generatedOTP) {
     int enteredOTP;
     cout << "Enter the OTP sent to your phone: ";
     cin >> enteredOTP;
-
     if (enteredOTP == generatedOTP) {
         cout << "OTP Verified Successfully.\n";
         return true;
@@ -103,10 +95,9 @@ bool processLoginOrRegister() {
     char choice;
     cout << "Do you want to Login or Register? (L/R): ";
     cin >> choice;
-
     if (choice != 'L' && choice != 'l' && choice != 'R' && choice != 'r') {
         cout << "Invalid choice. Try again.\n";
-        return processLoginOrRegister(); // retry
+        return processLoginOrRegister();
     }
 
     while (true) {
@@ -119,18 +110,13 @@ bool processLoginOrRegister() {
             continue;
         }
 
-        if (choice == 'R' || choice == 'r') {
-            // For Register, check if phone exists
-            if (isPhoneNumberExists(phoneNumber)) {
-                cout << "Phone number already exists.\n";
-            }
-        } else {
-            // For Login, no need to check existence message or saving
+        if ((choice == 'R' || choice == 'r') && isPhoneNumberExists(phoneNumber)) {
+            cout << "Phone number already exists.\n";
+            continue;
         }
 
         srand(time(0));
-        int otp = rand() % 9000 + 1000;  // 4-digit OTP
-
+        int otp = rand() % 9000 + 1000;
         cout << "Generating OTP...\n";
         cout << "Your OTP is: " << otp << endl;
 
@@ -146,8 +132,6 @@ bool processLoginOrRegister() {
         }
     }
 }
-
-#include <ctime>    // for system time
 
 bool isLeapYear(int year) {
     return (year % 400 == 0) || (year % 4 == 0 && year % 100 != 0);
@@ -166,33 +150,30 @@ bool isValidDate(const string& dateStr) {
         return false;
     }
 
-    if (year < 1900 || year > 2100) return false;  // arbitrary limits
+    if (year < 1900 || year > 2100) return false;
     if (month < 1 || month > 12) return false;
 
-    // Days in month accounting leap year for February
-    int daysInMonth[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    int daysInMonth[] = { 31,28,31,30,31,30,31,31,30,31,30,31 };
     if (month == 2 && isLeapYear(year)) {
         daysInMonth[1] = 29;
     }
-
     if (day < 1 || day > daysInMonth[month - 1]) return false;
 
-    // Check if date is not in the future
+    // get today date
     time_t t = time(nullptr);
     tm* now = localtime(&t);
-
     int currYear = now->tm_year + 1900;
     int currMonth = now->tm_mon + 1;
     int currDay = now->tm_mday;
 
-    if (year > currYear) return false;
-    if (year == currYear && month > currMonth) return false;
-    if (year == currYear && month == currMonth && day > currDay) return false;
+    // allow today & future only
+    if (year < currYear) return false;
+    if (year == currYear && month < currMonth) return false;
+    if (year == currYear && month == currMonth && day < currDay) return false;
 
     return true;
 }
 
-// Update inputs function to validate date
 void inputs(string &source, string &destination, string &date) {
     cout << "Enter Source: ";
     cin >> source;
@@ -202,16 +183,147 @@ void inputs(string &source, string &destination, string &date) {
     while (true) {
         cout << "Enter Date (DD-MM-YYYY): ";
         cin >> date;
-
         if (isValidDate(date)) {
             break;
         } else {
-            cout << "Invalid date.Please try again.\n";
+            cout << "Invalid date. Please try again.\n";
         }
     }
 }
 
-// ---------- Dashboard Placeholder Functions ----------
+// ---------- Seat Booking ----------
+vector<int> loadBookedSeats(int busId) {
+    vector<int> bookedSeats;
+    ifstream file("Seats.csv");
+    if (!file.is_open()) return bookedSeats;
+
+    string line;
+    while (getline(file, line)) {
+        if (line.empty()) continue;
+        stringstream ss(line);
+        string idStr;
+        getline(ss, idStr, ',');
+        int id = stoi(idStr);
+        if (id == busId) {
+            string seatStr;
+            while (getline(ss, seatStr, ',')) {
+                try {
+                    int seatNum = stoi(seatStr);
+                    bookedSeats.push_back(seatNum);
+                } catch (...) {}
+            }
+            break;
+        }
+    }
+    file.close();
+    return bookedSeats;
+}
+
+void saveBookedSeats(int busId, const vector<int>& bookedSeats) {
+    ifstream fileIn("Seats.csv");
+    vector<string> lines;
+    bool busFound = false;
+
+    if (fileIn.is_open()) {
+        string line;
+        while (getline(fileIn, line)) {
+            if (line.empty()) continue;
+            stringstream ss(line);
+            string idStr;
+            getline(ss, idStr, ',');
+            int id = stoi(idStr);
+
+            if (id == busId) {
+                busFound = true;
+                string newLine = to_string(busId);
+                for (int seat : bookedSeats) {
+                    newLine += "," + to_string(seat);
+                }
+                lines.push_back(newLine);
+            } else {
+                lines.push_back(line);
+            }
+        }
+        fileIn.close();
+    }
+
+    if (!busFound) {
+        string newLine = to_string(busId);
+        for (int seat : bookedSeats) {
+            newLine += "," + to_string(seat);
+        }
+        lines.push_back(newLine);
+    }
+
+    ofstream fileOut("Seats.csv", ios::trunc);
+    for (const auto& l : lines) {
+        fileOut << l << endl;
+    }
+    fileOut.close();
+}
+
+void selectSeat(int busId) {
+    vector<int> bookedSeats = loadBookedSeats(busId);
+    const int totalSeats = 20;
+    vector<int> availableSeats;
+
+    for (int seat = 1; seat <= totalSeats; ++seat) {
+        if (find(bookedSeats.begin(), bookedSeats.end(), seat) == bookedSeats.end()) {
+            availableSeats.push_back(seat);
+        }
+    }
+
+    if (availableSeats.empty()) {
+        cout << "Sorry, all seats are booked for this bus.\n";
+        return;
+    }
+
+    cout << "\nAvailable seats: ";
+    for (int seat : availableSeats) {
+        cout << seat << " ";
+    }
+    cout << endl;
+
+    cout << "Enter seat numbers to book (space separated): ";
+    vector<int> selectedSeats;
+    int seatChoice;
+    string line;
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    getline(cin, line);
+    stringstream ss(line);
+
+    while (ss >> seatChoice) {
+        if (seatChoice < 1 || seatChoice > totalSeats) {
+            cout << "Seat " << seatChoice << " is invalid, ignored.\n";
+        } else if (find(bookedSeats.begin(), bookedSeats.end(), seatChoice) != bookedSeats.end()) {
+            cout << "Seat " << seatChoice << " is already booked!\n";
+        } else if (find(selectedSeats.begin(), selectedSeats.end(), seatChoice) != selectedSeats.end()) {
+            cout << "Seat " << seatChoice << " is already selected, ignored.\n";
+        } else {
+            selectedSeats.push_back(seatChoice);
+        }
+    }
+
+    if (selectedSeats.empty()) {
+        cout << "No valid seats selected.\n";
+        return;
+    }
+
+    bookedSeats.insert(bookedSeats.end(), selectedSeats.begin(), selectedSeats.end());
+    saveBookedSeats(busId, bookedSeats);
+
+    cout << "Seats booked successfully: ";
+    for (int seat : selectedSeats) cout << seat << " ";
+    cout << endl;
+
+    passengerInfoAndPayment(selectedSeats, busId);
+}
+
+// ---------- Dashboard ----------
+void passengerInfoAndPayment(const vector<int>& seats, int busId) {
+    // Placeholder
+}
+
 void searchBus() {
     string source, destination, date;
     inputs(source, destination, date);
@@ -229,56 +341,68 @@ void searchBus() {
     string line;
 
     while (getline(file, line)) {
-        if (line.empty()) continue;  // skip blank lines
+        if (line.empty()) continue;
 
         stringstream ss(line);
-        string idStr, src, dest, type, priceStr;
+        string idStr, dateStr, src, dest, seatsStr, priceStr;
 
-        getline(ss, idStr, ',');
-        getline(ss, src, ',');
-        getline(ss, dest, ',');
-        getline(ss, type, ',');
-        getline(ss, priceStr, ',');
+        // Parse: ID,DATE,SOURCE,DESTINATION,SEATS,PRICE
+        if (!getline(ss, idStr, ',')) continue;
+        if (!getline(ss, dateStr, ',')) continue;
+        if (!getline(ss, src, ',')) continue;
+        if (!getline(ss, dest, ',')) continue;
+        if (!getline(ss, seatsStr, ',')) continue;
+        if (!getline(ss, priceStr, ',')) continue;
 
-        string srcLower = toLower(src);
-        string destLower = toLower(dest);
+        // Skip header row if present
+        int idVal;
+        try { idVal = stoi(idStr); }
+        catch (...) { continue; }
 
-        if (srcLower == sourceLower && destLower == destinationLower) {
+        // Filter by exact date + route
+        if (toLower(src) == sourceLower &&
+            toLower(dest) == destinationLower &&
+            dateStr == date) {
+
             Bus bus;
-            bus.id = stoi(idStr);
+            bus.id = idVal;
+            bus.date = dateStr;
             bus.source = src;
             bus.destination = dest;
-            bus.busType = type;
-            bus.price = stoi(priceStr);
+            try { bus.seats = stoi(seatsStr); } catch (...) { bus.seats = 0; }
+            try { bus.price = stoi(priceStr); } catch (...) { bus.price = 0; }
             matchedBuses.push_back(bus);
         }
     }
     file.close();
 
     if (matchedBuses.empty()) {
-        cout << "No buses found for " << source << " to " << destination << ".\n";
+        cout << "No buses available for this date on this route.\n";
         return;
     }
 
     cout << "\nAvailable buses from " << source << " to " << destination << " on " << date << ":\n";
-    cout << "ID\tSource\t\tDestination\tType\t\tPrice\n";
-
+    cout << "No.\tBusID\tSource\t\tDestination\tSeats\tPrice\n";
     for (size_t i = 0; i < matchedBuses.size(); i++) {
-        cout << (i + 1) << "\t" << matchedBuses[i].source << "\t\t" << matchedBuses[i].destination
-             << "\t\t" << matchedBuses[i].busType << "\t\t" << matchedBuses[i].price << "\n";
+        cout << (i + 1) << "\t"
+             << matchedBuses[i].id << "\t"
+             << matchedBuses[i].source << "\t\t"
+             << matchedBuses[i].destination << "\t\t"
+             << matchedBuses[i].seats << "\t"
+             << matchedBuses[i].price << "\n";
     }
 
     int choice;
-    cout << "Enter bus ID to choose: ";
+    cout << "Enter option number to choose (1-" << matchedBuses.size() << "): ";
     cin >> choice;
-
-    if (choice < 1 || choice >(int)matchedBuses.size()) {
-        cout << "Invalid bus ID selected.\n";
+    if (choice < 1 || choice > (int)matchedBuses.size()) {
+        cout << "Invalid option selected.\n";
         return;
     }
 
-    cout << "You selected Bus ID: " << choice << " (" << matchedBuses[choice - 1].busType << ")\n";
-    cout << "Proceeding to seat selection (functionality to be implemented)...\n";
+    Bus chosenBus = matchedBuses[choice - 1];
+    cout << "You selected Bus ID: " << chosenBus.id << "\n";
+    selectSeat(chosenBus.id);
 }
 
 void bookings() {
@@ -289,33 +413,22 @@ void updateProfile() {
     cout << "Update profile functionality to be implemented...\n";
 }
 
-// ---------- Dashboard Function ----------
 void dashboard() {
     bool stayInDashboard = true;
-
     while (stayInDashboard) {
         cout << "\n--- DASHBOARD ---\n";
         cout << "1. Search Bus\n";
         cout << "2. Bookings\n";
         cout << "3. Update Profile\n";
         cout << "Enter your choice (1-3): ";
-
         int choice;
         cin >> choice;
 
         switch (choice) {
-            case 1:
-                searchBus();
-                break;
-            case 2:
-                bookings();
-                break;
-            case 3:
-                updateProfile();
-                break;
-            default:
-                cout << "Invalid choice. Please enter 1, 2, or 3.\n";
-                continue; // show menu again
+            case 1: searchBus(); break;
+            case 2: bookings(); break;
+            case 3: updateProfile(); break;
+            default: cout << "Invalid choice. Please enter 1, 2, or 3.\n"; continue;
         }
 
         stayInDashboard = getYesNo("Go back to dashboard? (Y/N): ");
@@ -326,13 +439,11 @@ void dashboard() {
 int main() {
     if (processLoginOrRegister()) {
         dashboard();
-
         if (getYesNo("Do you want to logout? (Y/N): ")) {
             cout << "Logout successfully.\n";
         }
     } else {
         cout << "Returning to main menu. Login/Register not completed.\n";
     }
-
     return 0;
 }

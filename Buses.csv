@@ -1,18 +1,19 @@
-1,Coimbatore,Chennai,Seater,500
-2,Coimbatore,Chennai,Sleeper,600
-3,Coimbatore,Chennai,AC Sleeper,800
-4,Chennai,Coimbatore,Seater,500
-5,Chennai,Coimbatore,Sleeper,600
-6,Chennai,Coimbatore,AC Seater,750
-7,Chennai,Bangalore,Seater,700
-8,Chennai,Bangalore,Sleeper,850
-9,Chennai,Bangalore,Volvo AC,1200
-10,Bangalore,Chennai,Seater,700
-11,Bangalore,Chennai,Sleeper,850
-12,Bangalore,Chennai,Volvo AC,1200
-13,Coimbatore,Bangalore,Seater,900
-14,Coimbatore,Bangalore,Sleeper,1100
-15,Coimbatore,Bangalore,AC Sleeper,1300
-16,Bangalore,Coimbatore,Seater,900
-17,Bangalore,Coimbatore,Sleeper,1100
-18,Bangalore,Coimbatore,AC Seater,1250
+ID,DATE,SOURCE,DESTINATION,SEAT,PRICE
+1,25-08-2025,Chennai,Coimbatore,40,600
+2,25-08-2025,Coimbatore,Bangalore,35,550
+3,25-08-2025,Bangalore,Chennai,30,650
+4,26-08-2025,Chennai,Coimbatore,40,600
+5,26-08-2025,Coimbatore,Bangalore,38,500
+6,26-08-2025,Bangalore,Chennai,32,620
+7,27-08-2025,Chennai,Coimbatore,45,580
+8,27-08-2025,Coimbatore,Bangalore,36,560
+9,27-08-2025,Bangalore,Chennai,33,640
+10,28-08-2025,Chennai,Coimbatore,42,610
+11,28-08-2025,Coimbatore,Bangalore,37,530
+12,28-08-2025,Bangalore,Chennai,31,630
+13,29-08-2025,Chennai,Coimbatore,41,590
+14,29-08-2025,Coimbatore,Bangalore,34,520
+15,29-08-2025,Bangalore,Chennai,29,600
+16,30-08-2025,Chennai,Coimbatore,39,610
+17,30-08-2025,Coimbatore,Bangalore,36,540
+18,30-08-2025,Bangalore,Chennai,32,620
