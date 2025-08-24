@@ -390,8 +390,59 @@ void passengerInfoAndPayment(const vector<int>& seats, int busId) {
     }
     file.close();
 
-    int totalAmount = pricePerSeat * seats.size();
-    cout << "Total amount to pay: ₹" << totalAmount << endl;
+int totalAmount = pricePerSeat * seats.size();
+cout << "Seat Price: ₹" << pricePerSeat << " x " << seats.size() << " seat(s)" << endl;
+cout << "Subtotal: ₹" << totalAmount << endl;
+
+// Predefined coupons
+vector<pair<string, int>> coupons = {
+    {"REDBUS300", 300},
+    {"SAVE150", 150},
+    {"NEWUSER100", 100}
+};
+
+int discount = 0;
+bool appliedCoupon = false;
+
+if (getYesNo("Do you have a coupon? (Y/N): ")) {
+    while (true) {
+        cout << "\nAvailable Coupons:\n";
+        for (auto& c : coupons) {
+            cout << "- " << c.first << " (₹" << c.second << " off)\n";
+        }
+
+        string enteredCoupon;
+        cout << "Enter your coupon code: ";
+        cin >> enteredCoupon;
+
+        bool validCoupon = false;
+        for (auto& c : coupons) {
+            if (toLower(c.first) == toLower(enteredCoupon)) {
+                discount = c.second;
+                validCoupon = true;
+                break;
+            }
+        }
+
+        if (validCoupon) {
+            cout << "Coupon applied successfully! ₹" << discount << " off.\n";
+            appliedCoupon = true;
+            break;
+        } else {
+            cout << "Invalid coupon code.\n";
+            if (!getYesNo("Do you want to try another coupon? (Y/N): ")) break;
+        }
+    }
+}
+
+if (appliedCoupon) {
+    totalAmount -= discount;
+    if (totalAmount < 0) totalAmount = 0;
+}
+
+cout << "Final amount to pay: ₹" << totalAmount << endl;
+
+
 
     // Run payment; on success, append all passenger entries and update seats
     if (!payment(seats, busId, totalAmount)) {
