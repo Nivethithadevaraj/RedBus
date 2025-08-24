@@ -20,6 +20,8 @@ struct Bus {
     int price;
 };
 
+string loggedInPhone;
+
 struct Passenger {
     string name;
     int age;
@@ -27,10 +29,58 @@ struct Passenger {
     string phone;
     int seatNumber;
     int busId;
+    string ticketId;
 };
 
+// forward declarations
+string generateTicketID();
+bool ticketIdExists(const string& id);
 void passengerInfoAndPayment(const vector<int>& seats, int busId);
-void payment(const vector<int>& seats, int busId);
+bool payment(const vector<int>& seats, int busId, int totalAmount);
+bool getYesNo(const string& prompt);
+string toLower(const string& s);
+bool isValidPhoneNumber(const string& phone);
+bool isPhoneNumberExists(const string& phoneNumber);
+void saveUserToCSV(const string& phoneNumber);
+bool verifyOTP(int generatedOTP);
+bool processLoginOrRegister();
+bool isLeapYear(int year);
+bool isValidDate(const string& dateStr);
+void inputs(string& source, string& destination, string& date);
+vector<int> loadBookedSeats(int busId);
+void saveBookedSeats(int busId, const vector<int>& bookedSeats);
+void selectSeat(int busId);
+void searchBus();
+string getBusDate(int busId);
+void cancelTicket(const string& ticketId);
+void currentBookings();
+void bookings();
+void updateProfile();
+void dashboard();
+
+
+// generate a 3-digit ticket id (100..999) — no reseeding here
+string generateTicketID() {
+    string id;
+    do {
+        int num = rand() % 900 + 100; // 100..999
+        id = to_string(num);
+    } while (ticketIdExists(id));
+    return id;
+}
+
+bool ticketIdExists(const string& id) {
+    ifstream in("Passengers.csv");
+    string line;
+    while (getline(in, line)) {
+        if (line.empty()) continue;
+        stringstream ss(line);
+        string tId;
+        getline(ss, tId, ',');
+        if (tId == id) return true;
+    }
+    return false;
+}
 
 bool getYesNo(const string& prompt) {
     char input;
@@ -105,7 +155,6 @@ bool processLoginOrRegister() {
             continue;
         }
 
-        srand(time(0));
         int otp = rand() % 9000 + 1000;
         cout << "Your OTP is: " << otp << endl;
 
@@ -113,11 +162,41 @@ bool processLoginOrRegister() {
             if ((choice == 'R' || choice == 'r') && !isPhoneNumberExists(phoneNumber)) {
                 saveUserToCSV(phoneNumber);
             }
+            loggedInPhone = phoneNumber;  // store the logged-in number
             return true;
         } else {
             if (!getYesNo("Try again? (Y/N): ")) return false;
         }
     }
+}
+bool isValidDOB(const string& dobStr) {
+    if (dobStr.length() != 10 || dobStr[2] != '-' || dobStr[5] != '-') return false;
+    int day, month, year;
+    try {
+        day = stoi(dobStr.substr(0, 2));
+        month = stoi(dobStr.substr(3, 2));
+        year = stoi(dobStr.substr(6, 4));
+    } catch (...) {
+        return false;
+    }
+
+    if (year < 1900 || year > 2100 || month < 1 || month > 12) return false;
+    int daysInMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (month == 2 && isLeapYear(year)) daysInMonth[1] = 29;
+    if (day < 1 || day > daysInMonth[month - 1]) return false;
+
+    // Compare with current date (DOB must be before today)
+    time_t t = time(nullptr);
+    tm* now = localtime(&t);
+    int currYear = now->tm_year + 1900;
+    int currMonth = now->tm_mon + 1;
+    int currDay = now->tm_mday;
+
+    if (year > currYear) return false;
+    if (year == currYear && month > currMonth) return false;
+    if (year == currYear && month == currMonth && day >= currDay) return false;
+
+    return true;
 }
 
 bool isLeapYear(int year) {
@@ -178,7 +257,8 @@ vector<int> loadBookedSeats(int busId) {
             if (id == busId) {
                 string seatStr;
                 while (getline(ss, seatStr, ',')) {
-                    bookedSeats.push_back(stoi(seatStr));
+                    if (!seatStr.empty())
+                        bookedSeats.push_back(stoi(seatStr));
                 }
                 break;
             }
@@ -239,7 +319,7 @@ void selectSeat(int busId) {
     vector<int> selectedSeats;
     string line;
     int seat;
-    cin.ignore();
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
     getline(cin, line);
     stringstream ss(line);
 
@@ -259,20 +339,20 @@ void selectSeat(int busId) {
 }
 
 void passengerInfoAndPayment(const vector<int>& seats, int busId) {
+    // Collect passenger info locally first (don't write to file yet)
     vector<Passenger> passengers;
+    string date = getBusDate(busId);
+    if (date.empty()) date = "00-00-0000";
+
     for (int seat : seats) {
         Passenger p;
         p.busId = busId;
         p.seatNumber = seat;
+        p.phone = loggedInPhone; // do not ask phone again; logged-in user used for bookings
         cout << "\n-- Seat " << seat << " --\n";
 
-        do {
-            cout << "Phone (10 digits): ";
-            cin >> p.phone;
-        } while (!isValidPhoneNumber(p.phone));
-
         cout << "Name: ";
-        cin.ignore();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
         getline(cin, p.name);
 
         do {
@@ -286,45 +366,61 @@ void passengerInfoAndPayment(const vector<int>& seats, int busId) {
             p.gender = toupper(p.gender);
         } while (p.gender != 'M' && p.gender != 'F' && p.gender != 'O');
 
+        p.ticketId = generateTicketID();
         passengers.push_back(p);
     }
 
-    ofstream out("Passengers.csv", ios::app);
-    for (const Passenger& p : passengers) {
-        out << p.busId << "," << p.seatNumber << "," << p.name << ","
-            << p.age << "," << p.gender << "," << p.phone << endl;
-    }
-    out.close();
-
-    payment(seats, busId);
-}
-
-void payment(const vector<int>& seats, int busId) {
+    // Determine price per seat
     ifstream file("Buses.csv");
     string line;
     int pricePerSeat = 0;
-
     while (getline(file, line)) {
         stringstream ss(line);
-        string idStr, date, src, dest, seatsStr, priceStr;
+        string idStr, dateStr, src, dest, seatStr, priceStr;
         getline(ss, idStr, ',');
         try {
             int id = stoi(idStr);
             if (id == busId) {
-                getline(ss, date, ','); getline(ss, src, ','); getline(ss, dest, ',');
-                getline(ss, seatsStr, ','); getline(ss, priceStr, ',');
+                getline(ss, dateStr, ','); getline(ss, src, ','); getline(ss, dest, ',');
+                getline(ss, seatStr, ','); getline(ss, priceStr, ',');
                 pricePerSeat = stoi(priceStr);
                 break;
             }
         } catch (...) {}
     }
+    file.close();
 
     int totalAmount = pricePerSeat * seats.size();
-    cout << "Total: ₹" << totalAmount << "\nChoose payment method (1. UPI 2. Card 3. NetBanking): ";
+    cout << "Total amount to pay: ₹" << totalAmount << endl;
+
+    // Run payment; on success, append all passenger entries and update seats
+    if (!payment(seats, busId, totalAmount)) {
+        cout << "Payment failed. Booking cancelled.\n";
+        return;
+    }
+
+    // Append passengers to file now
+    ofstream out("Passengers.csv", ios::app);
+    for (const Passenger& p : passengers) {
+        out << p.ticketId << "," << p.busId << "," << p.seatNumber << "," 
+            << date << "," << p.name << "," << p.age << "," << p.gender << "," << p.phone << endl;
+        cout << "Booking Confirmed! Ticket ID: " << p.ticketId << " | Seat: " << p.seatNumber << "\n";
+    }
+    out.close();
+
+    // mark seats as booked now
+    vector<int> finalSeats = loadBookedSeats(busId);
+    finalSeats.insert(finalSeats.end(), seats.begin(), seats.end());
+    // remove possible duplicates and sort
+    sort(finalSeats.begin(), finalSeats.end());
+    finalSeats.erase(unique(finalSeats.begin(), finalSeats.end()), finalSeats.end());
+    saveBookedSeats(busId, finalSeats);
+}
+
+bool payment(const vector<int>& seats, int busId, int totalAmount) {
+    cout << "Choose payment method (1. UPI 2. Card 3. NetBanking): ";
     int method;
     cin >> method;
-
-    srand(time(0));  // Seed once here
 
     if (method == 1) { // UPI
         string upiId, pin;
@@ -334,12 +430,13 @@ void payment(const vector<int>& seats, int busId) {
         cout << "Enter PIN: ";
         cin >> pin;
         cout << "Authenticating...\n";
+        // Simulate success/failure
     } else if (method == 2) { // Card
         int otp = rand() % 9000 + 1000;
         cout << "Card Payment Selected.\nYour OTP is: " << otp << endl;
         if (!verifyOTP(otp)) {
             cout << "OTP Verification Failed. Booking Cancelled.\n";
-            return;
+            return false;
         }
     } else if (method == 3) { // NetBanking
         string accNo, cvv;
@@ -352,38 +449,21 @@ void payment(const vector<int>& seats, int busId) {
         cout << "An OTP has been sent: " << otp << endl;
         if (!verifyOTP(otp)) {
             cout << "OTP Verification Failed. Booking Cancelled.\n";
-            return;
+            return false;
         }
     } else {
         cout << "Invalid payment method.\n";
-        return;
+        return false;
     }
 
     cout << "Processing payment...\n";
-    bool success = rand() % 2;
-
+    bool success = (rand() % 2 == 0); // 50% chance success (simulation)
     if (success) {
         cout << "Payment Successful!\n";
-        vector<int> finalSeats = loadBookedSeats(busId);
-        finalSeats.insert(finalSeats.end(), seats.begin(), seats.end());
-        saveBookedSeats(busId, finalSeats);
-        cout << "Booking Confirmed. Thank you!\n";
+        return true;
     } else {
-        cout << "Payment Failed. Booking Cancelled.\n";
-
-        // Remove passenger info from file
-        ifstream in("Passengers.csv");
-        vector<string> lines;
-        while (getline(in, line)) {
-            bool toDelete = false;
-            for (int s : seats)
-                if (line.find(to_string(busId) + "," + to_string(s) + ",") == 0)
-                    toDelete = true;
-            if (!toDelete) lines.push_back(line);
-        }
-        in.close();
-        ofstream out("Passengers.csv");
-        for (string& l : lines) out << l << endl;
+        cout << "Payment Failed.\n";
+        return false;
     }
 }
 
@@ -432,12 +512,271 @@ void searchBus() {
 
     selectSeat(buses[choice - 1].id);
 }
-void bookings(){
 
+string getBusDate(int busId) {
+    ifstream file("Buses.csv");
+    string line;
+    while (getline(file, line)) {
+        stringstream ss(line);
+        string idStr, date, src, dest, seatStr, priceStr;
+        getline(ss, idStr, ',');
+        try {
+            int id = stoi(idStr);
+            if (id == busId) {
+                getline(ss, date, ',');
+                return date;
+            }
+        } catch (...) {}
+    }
+    return "";
 }
-void updateProfile(){
-    
+
+void cancelTicket(const string& ticketId) {
+    if (!getYesNo("Do you want to cancel this ticket? (Y/N): ")) return;
+
+    ifstream in("Passengers.csv");
+    vector<string> lines;
+    string line;
+    bool found = false;
+    int busId = -1, seatNum = -1;
+
+    while (getline(in, line)) {
+        if (line.empty()) continue;
+        stringstream ss(line);
+        string tId, busIdStr, seatStr, date, name, age, gender, phoneInFile;
+        getline(ss, tId, ',');
+        getline(ss, busIdStr, ',');
+        getline(ss, seatStr, ',');
+        getline(ss, date, ',');
+        getline(ss, name, ',');
+        getline(ss, age, ',');
+        getline(ss, gender, ',');
+        getline(ss, phoneInFile);
+
+        if (tId == ticketId && phoneInFile == loggedInPhone) {
+            found = true;
+            try {
+                busId = stoi(busIdStr);
+                seatNum = stoi(seatStr);
+            } catch (...) { }
+            continue; // skip this line (delete)
+        }
+        lines.push_back(line);
+    }
+    in.close();
+
+    if (!found) {
+        cout << "Ticket not found or phone mismatch.\n";
+        return;
+    }
+
+    ofstream out("Passengers.csv");
+    for (auto& l : lines) out << l << endl;
+    out.close();
+
+    if (busId != -1 && seatNum != -1) {
+        vector<int> seats = loadBookedSeats(busId);
+        seats.erase(remove(seats.begin(), seats.end(), seatNum), seats.end());
+        saveBookedSeats(busId, seats);
+    }
+
+    cout << "Ticket cancelled successfully. Amount will be refunded shortly.\n";
 }
+
+void currentBookings() {
+    ifstream in("Passengers.csv");
+    vector<string> lines;
+    string line;
+
+    cout << "\n--- CURRENT BOOKINGS ---\n";
+
+    while (getline(in, line)) {
+        if (line.empty()) continue;
+        stringstream ss(line);
+        string ticketId, busIdStr, seatStr, date, name, ageStr, gender, phoneInFile;
+        getline(ss, ticketId, ',');
+        getline(ss, busIdStr, ',');
+        getline(ss, seatStr, ',');
+        getline(ss, date, ',');
+        getline(ss, name, ',');
+        getline(ss, ageStr, ',');
+        getline(ss, gender, ',');
+        getline(ss, phoneInFile);
+
+        if (phoneInFile == loggedInPhone && isValidDate(date)) {
+            cout << "Ticket ID: " << ticketId << ", Name: " << name << ", Date: " << date << ", Seat: " << seatStr << "\n";
+            lines.push_back(line);
+        }
+    }
+    in.close();
+
+    if (lines.empty()) {
+        cout << "No current bookings found.\n";
+        return;
+    }
+
+    while (true) {
+        string selectedId;
+        cout << "\nEnter Ticket ID to view details: ";
+        cin >> selectedId;
+
+        bool found = false;
+        for (const string& ticketLine : lines) {
+            stringstream ss(ticketLine);
+            string ticketId, busIdStr, seatStr, date, name, ageStr, gender, phoneInFile;
+            getline(ss, ticketId, ',');
+            getline(ss, busIdStr, ',');
+            getline(ss, seatStr, ',');
+            getline(ss, date, ',');
+            getline(ss, name, ',');
+            getline(ss, ageStr, ',');
+            getline(ss, gender, ',');
+            getline(ss, phoneInFile);
+
+            if (ticketId == selectedId) {
+                found = true;
+                cout << "\n--- TICKET DETAILS ---\n";
+                cout << "Ticket ID: " << ticketId << "\n";
+                cout << "Bus ID: " << busIdStr << "\n";
+                cout << "Seat: " << seatStr << "\n";
+                cout << "Name: " << name << "\n";
+                cout << "Age: " << ageStr << "\n";
+                cout << "Gender: " << gender << "\n";
+                cout << "Phone: " << phoneInFile << "\n";
+                cout << "Date: " << date << "\n";
+
+                if (getYesNo("Do you want to cancel this ticket? (Y/N): ")) {
+                    cancelTicket(ticketId);
+                }
+                break;
+            }
+        }
+
+        if (!found) cout << "Ticket ID not found.\n";
+
+        if (!getYesNo("Do you want to view another ticket? (Y/N): ")) break;
+    }
+}
+
+void bookings() {
+    while (true) {
+        cout << "\n--- BOOKINGS ---\n";
+        cout << "1. Past Bookings\n";
+        cout << "2. Current Bookings\n";
+        cout << "Enter your choice: ";
+        int choice;
+        cin >> choice;
+
+        if (choice == 1) {
+            cout << "\n--- PAST BOOKINGS ---\n";
+            ifstream in("Passengers.csv");
+            string line;
+            bool found = false;
+            while (getline(in, line)) {
+                if (line.empty()) continue;
+                stringstream ss(line);
+                string ticketId, busIdStr, seatStr, date, name, ageStr, gender, phoneInFile;
+                getline(ss, ticketId, ',');
+                getline(ss, busIdStr, ',');
+                getline(ss, seatStr, ',');
+                getline(ss, date, ',');
+                getline(ss, name, ',');
+                getline(ss, ageStr, ',');
+                getline(ss, gender, ',');
+                getline(ss, phoneInFile);
+
+                if (phoneInFile == loggedInPhone) {
+                    if (!isValidDate(date)) { // past date
+                        found = true;
+                        cout << "Ticket ID: " << ticketId << ", Bus ID: " << busIdStr << ", Seat: " << seatStr << ", Name: " << name << ", Date: " << date << "\n";
+                    }
+                }
+            }
+            if (!found) cout << "No past bookings found.\n";
+        } else if (choice == 2) {
+            currentBookings();
+        } else {
+            cout << "Invalid choice.\n";
+        }
+
+        if (!getYesNo("Do you want to check bookings again? (Y/N): ")) break;
+    }
+}
+
+void updateProfile() {
+    string name, dob, gender, phone = loggedInPhone, email = "";
+
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear input buffer
+
+    cout << "\n--- UPDATE PROFILE ---\n";
+
+    cout << "Full Name: ";
+    getline(cin, name);
+
+    while (true) {
+        cout << "Date of Birth (DD-MM-YYYY): ";
+        getline(cin, dob);
+        if (isValidDOB(dob)) break;
+        else cout << "Invalid date. Try again.\n";
+    }
+
+    while (true) {
+        cout << "Gender (M/F/O): ";
+        getline(cin, gender);
+        if (gender.length() == 1 && (gender[0] == 'M' || gender[0] == 'F' || gender[0] == 'O' ||
+                                     gender[0] == 'm' || gender[0] == 'f' || gender[0] == 'o')) {
+            gender[0] = toupper(gender[0]);
+            break;
+        } else {
+            cout << "Invalid input. Please enter M, F, or O.\n";
+        }
+    }
+
+    cout << "Registered Phone Number: " << phone << endl;
+
+    if (getYesNo("Do you want to update email? (Y/N): ")) {
+        cout << "Email: ";
+        getline(cin, email);
+    }
+
+    // Read existing profiles and check if user already exists
+    ifstream inFile("Profiles.csv");
+    vector<string> lines;
+    string line;
+    bool found = false;
+
+    while (getline(inFile, line)) {
+        if (line.empty()) continue;
+        stringstream ss(line);
+        string existingPhone;
+        getline(ss, existingPhone, ',');
+
+        if (existingPhone == phone) {
+            // Replace with updated info
+            string newLine = phone + "," + name + "," + dob + "," + gender + "," + email;
+            lines.push_back(newLine);
+            found = true;
+        } else {
+            lines.push_back(line);
+        }
+    }
+    inFile.close();
+
+    if (!found) {
+        string newLine = phone + "," + name + "," + dob + "," + gender + "," + email;
+        lines.push_back(newLine);
+    }
+
+    ofstream outFile("Profiles.csv");
+    for (const string& l : lines) {
+        outFile << l << endl;
+    }
+    outFile.close();
+
+    cout << "Profile updated successfully!\n";
+}
+
+
 void dashboard() {
     while (true) {
         cout << "\n--- DASHBOARD ---\n";
@@ -457,13 +796,22 @@ void dashboard() {
     }
 }
 
-
 int main() {
+    srand((unsigned)time(0)); // seed RNG once
+    cout << "Welcome to Bus Booking System\n";
+
     if (processLoginOrRegister()) {
-        // dashboard();
-        if (getYesNo("Logout? (Y/N): ")) cout << "Logged out.\n";
+        if (getYesNo("Do you want to go to the dashboard? (Y/N): ")) {
+            dashboard();
+            if (getYesNo("Logout? (Y/N): ")) {
+                cout << "Logged out.\n";
+            }
+        } else {
+            cout << "You chose not to enter the dashboard. Exiting.\n";
+        }
     } else {
         cout << "Login/Register failed.\n";
     }
+
     return 0;
 }
